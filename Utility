@@ -1,0 +1,74 @@
+Option Explicit
+
+
+' Present Value of Future Dividends
+
+Function PVDiv(T As Double, TDiv As Range, Div As Range, rDiv As Range)
+    Dim i  As Integer, j As Integer                                 'Iteration parameter
+    Dim nDiv As Integer, nTDiv As Integer, nrDiv As Integer         'Range size of divided schedule component
+    Dim PVD As Double                                               'Present value dummy of dividend
+    nDiv = 0: nTDiv = 0: nrDiv = 0
+    ' Extract range size of dividend schedule
+    nDiv = Application.Count(Div)                                   'No. of dividend
+    nTDiv = Application.Count(TDiv)                                 'No. of ex-dividend time
+    nrDiv = Application.Count(rDiv)                                 'No. of discount rate per dividend
+    
+    ' Check for range size consistency
+    If (nDiv <> nTDiv) Or (nDiv <> nrDiv) Then                       'If dividend schedule input sizes are inconsistent
+            MsgBox ("Inconsistent range sizes in Dividend Schedule.")   'Alert for inconsistency
+            PVDiv = CVErr(xlErrValue)                                   'Return error if inconsistent
+            Exit Function                                               'Exit function for error
+    End If
+    
+    ' Data validation for numerical and chronological inputs
+    For i = 1 To nDiv
+        If IsNumeric(TDiv(i)) = False Or IsNumeric(Div(i)) = False Or IsNumeric(rDiv(i)) = False Then   'Check for numerical inputs
+            MsgBox ("Missing or inappropriate value in Dividend Schedule.")                             'Alert for non-numerical input
+            PVDiv = CVErr(xlErrValue)                               'Return error if non-numerical input exists
+            Exit Function                                           'Exit function for error
+        Else
+            If i > 1 Then
+                If TDiv(i) < TDiv(i - 1) Then                       'Check for dividend time order
+                MsgBox ("Please check for chronological order in Dividend Schedule.")       'Alert for non-chronological order
+                PVDiv = CVErr(xlErrValue)                           'Return error if dividend order is non-chronological
+                Exit Function                                       'Exit function for error
+                End If
+            End If
+        End If
+    Next i
+    
+    ' Calculate present value of dividends
+    PVD = 0                                                                     'Initial value of PVD
+    For i = 1 To nDiv                                                           'Loop over dividend schedule
+        If (TDiv(i) <= T) Then: PVD = PVD + Div(i) * Exp(-rDiv(i) * TDiv(i))    'Discount dividend only before maturity
+    Next i
+    PVDiv = PVD
+End Function
+
+
+' PDF For Standard Normal
+
+Function pdfNorm(x As Double)
+    pdfNorm = Exp(-x ^ 2 / 2) / Sqr(2 * Application.Pi())
+End Function
+
+
+' CDF For Standard Normal
+
+Function cdfNorm(x As Double)
+    cdfNorm = Application.NormSDist(x)
+End Function
+
+
+' Calculate No. of Combination
+
+Function NCombin(n As Integer, k As Integer) As Integer
+    NCombin = Application.Combin(n, k)
+End Function
+
+
+' Calculate Pi
+
+Function Pi() As Double
+    Pi = Application.Pi
+End Function
