@@ -23,7 +23,6 @@ This repository is an extraction of the legacy examples in option pricing in VBA
 - Heston Option Price on Dividend-Paying Stock Using Trapezoidal Method with Combined Integrand
 - Heston Delta with discrete dividend
 - Heston Rho with discrete dividend
-- Integrand for derivative dP1/dS, used for Gamma
 - Heston Gamma with discrete dividend
 - Heston Vega with discrete dividend
 - Heston Theta with discrete dividend
