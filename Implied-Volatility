@@ -1,0 +1,44 @@
+Option Explicit
+
+' Implied Volatility from BS_Vega by Bisection-and-Newton-Raphson Method
+
+Function IVol_BisNewt(S As Double, k As Double, r As Double, T As Double, lowBound As Double, upBound As Double, CallPut As String, MktOP As Double)
+    Dim EPS As Double, MAXITER As Integer, i As Integer                     'Interation parameters including max tolerance and no. of interation
+    Dim lowCdif As Double, midCdif As Double, highCdif As Double            'Market-BS option price difference at mid-range and boundaries of volatility
+    Dim midPt As Double, midCvega As Double, dx_old As Double, dx As Double 'Bisected root, vega, and changes in root
+    MAXITER = 500                                                           'Maximum no. of iteration
+    EPS = 1E-05                                                             'Maximum tolerance of solution
+    
+    'Calculate Bisection mid point
+    lowCdif = MktOP - BS_Euro(S, k, r, T, lowBound, CallPut)                'Price difference at lower bound of volatility
+    highCdif = MktOP - BS_Euro(S, k, r, T, upBound, CallPut)                'Price difference at higher bound of volatility
+    midPt = 0.5 * (lowBound + upBound)                                      'Mid-Pt of bisection
+    dx_old = (upBound - lowBound)                                           'Initial bound range of root in iteration
+    dx = dx_old                                                             'Pass updated bound range
+    midCdif = MktOP - BS_Euro(S, k, r, T, midPt, CallPut)                   'Price difference at mid point
+    midCvega = BS_Vega(S, k, T, r, midPt)                                   'Vega as mid point
+    For i = 1 To MAXITER
+        If ((((midPt - upBound) * midCvega - midCdif) * _
+                ((midPt - lowBound) * midCvega - midCdif) > 0) Or _
+                (Abs(2 * midCdif) > Abs(dx_old * midCvega))) Then           'If root found falls outside Bisection boundaries
+            dx_old = dx
+            dx = 0.5 * (upBound - lowBound)                                 'Enforce the Bisection bound
+            midPt = lowBound + dx                                           'Update mid point withing the bound
+        Else                                                                'Otherwise
+            dx_old = dx
+            dx = midCdif / midCvega                                         'Find root change at iteration
+            midPt = midPt - dx                                              'Update mid pt for iteration
+        End If
+        midCdif = MktOP - BS_Euro(S, k, r, T, midPt, CallPut)               'Update price difference by mid pt
+        If (Abs(midCdif) < EPS) Then                                        'Exit function if difference is sufficiently small
+             Exit For
+        End If
+        midCvega = BS_Vega(S, k, T, r, midPt)                               'Update vega at mid pt
+        If (midCdif < 0) Then
+            upBound = midPt                                                 'Update upper bound as mid pt if price difference is negative
+        Else
+            lowBound = midPt                                                'Update lower bound as mid pt if price difference is positive
+        End If
+    Next i
+IVol_BisNewt = midPt                                                        'Return final root
+End Function
