@@ -1,0 +1,318 @@
+
+Option Explicit
+
+
+
+' CRR Binomial Tree for European Vanilla Option
+
+Function CRREuro(S As Double, k As Double, T As Double, r As Double, sigma As Double, n As Integer, CallPut As String)
+    Dim dt As Double, u As Double, d As Double, q As Double, Payoff As Double, i As Integer
+    dt = T / n                                                                  'Time period per step
+    u = Exp(sigma * (dt ^ 0.5)): d = 1 / u                                      'Up/down movement
+    q = (Exp(r * dt) - d) / (u - d)                                             'Probability of up move
+    Payoff = 0
+    For i = 0 To n
+        Select Case CallPut
+        Case "Call":
+            Payoff = Payoff + NCombin(n, i) * q ^ i * (1 - q) ^ (n - i) _
+                * Application.Max(S * u ^ i * d ^ (n - i) - k, 0)               'Terminal option payoff for European call
+        Case "Put":
+            Payoff = Payoff + NCombin(n, i) * q ^ i * (1 - q) ^ (n - i) _
+                * Application.Max(k - S * u ^ i * d ^ (n - i), 0)               'Terminal option payoff for European put
+        End Select
+    Next i
+    CRREuro = Exp(-r * T) * Payoff                                              'Return result of discounted payoff
+End Function
+
+
+
+'Function of CRR binomial option pricing for European and American vanilla options
+
+Function CRREuAm(Spot, K, T, r, sigma, n, CallPut, AmerEuro)
+    
+    'Calculate up/down price movement and probabilities per change in time
+    dt = T / n                                                                 'Delta t = time to maturity/no. of steps
+    u = Exp(sigma * (dt ^ 0.5)): d = 1 / u                                     'Up/down price movement
+    q = (Exp(r * dt) - d) / (u - d)                                            'Probability of up movement
+    
+    'Check for appropriate probability for no-arbitrage condition
+    If q <= 0 Or q >= 1 Then
+        CRREuAm = CVErr(xlErrValue)                                            'Return error if no-arbitrage condition is violated
+    Else
+        
+        'Build binomial stock price tree
+        Dim S(), P() As Double                                                 'Create stock price and payoff arrays
+        ReDim S(n + 1, n + 1), P(n + 1, n + 1) As Double                       'Starting from spot(t=1) to n(t=n+1) with same no. of value as t in each vector
+        S(1, 1) = Spot                                                         'Specify starting price
+        For i = 1 To n + 1                                                     'Loop down price vector
+            For j = i To n + 1                                                 'Loop across time
+                S(i, j) = S(1, 1) * u ^ (j - i) * d ^ (i - 1)                  'Iteration to compute up/down node price from spot
+            Next j
+        Next i
+            
+        'Build trinomial payoff tree condition on call/put option
+        For i = 1 To n + 1                                                      'Loop down terminal payoff vector
+            Select Case CallPut
+                Case "Call"
+                  P(i, n + 1) = Application.Max(S(i, n + 1) - K, 0)             'Terminal payoff for call option
+                Case "Put"
+                  P(i, n + 1) = Application.Max(K - S(i, n + 1), 0)             'Terminal payoff for put option
+            End Select
+        Next i
+        
+        'Discount expected payoff back to t=0 condition on option style
+        For j = n To 1 Step -1                                                  'Loop from maturity back to t=0
+            For i = 1 To j                                                      'Loop down payoff vector for each t
+                Select Case AmerEuro
+                 Case "Amer"
+                 If CallPut = "Call" Then
+                    P(i, j) = Application.Max(S(i, j) - K, Exp(-r * dt) _
+                    * (q * P(i, j + 1) + (1 - q) * P(i + 1, j + 1)))            'Local price for node in American call
+                 ElseIf CallPut = "Put" Then
+                 P(i, j) = Application.Max(K - S(i, j), Exp(-r * dt) _
+                 * (q * P(i, j + 1) + (1 - q) * P(i + 1, j + 1)))               'Local price for node in American put
+                 End If
+                 Case "Euro"
+                 P(i, j) = Exp(-r * dt) * (q * P(i, j + 1) _
+                 + (1 - q) * P(i + 1, j + 1))                                   'Local price for node in European option
+                End Select
+            Next i
+        Next j
+        CRREuAm = P(1, 1)                                                       'Return option price estimate
+    End If
+End Function
+
+
+
+'Function of flexible binomial option pricing for European & American vanilla options
+
+Function TianBin(Spot, K, T, r, sigma, n, CallPut, AmerEuro, lambda_input)
+    
+    'Calculate lambda, up/down price movement and probabilities per change in time
+    dt = T / n                                                                  'Delta t = time to maturity/no. of steps
+    u0 = Exp(sigma * Sqr(dt)): d0 = 1 / u0                                      'Up/down price movement to calculate lambda
+    If lambda_input = Empty Then                                                'Calculate Tian's lambda if no value of lambda is specified
+        n0 = Application.Round((Log(K / Spot) - n * Log(d0)) / _
+            Log(u0 / d0), 0)
+        lambda = (Log(K / Spot) - (2 * n0 - n) * sigma * Sqr(dt)) / _
+            (n * sigma ^ 2 * dt)                                                'lambda using Tian's formula
+    Else
+        lambda = lambda_input                                                   'lambda using specified value
+    End If
+    u = Exp(sigma * Sqr(dt) + lambda * sigma ^ 2 * dt)                          'lambda adjusted up price movement
+    d = Exp(-sigma * Sqr(dt) + lambda * sigma ^ 2 * dt)                         'lambda adjusted down price movement
+    q = (Exp(r * dt) - d) / (u - d)                                             'Probability of up movement
+    
+    'Check for no-arbitrage condition probability
+    If q <= 0 Or q >= 1 Then
+        TianBin = CVErr(xlErrValue)                                             'Return error if no-arbitrage condition is violated
+    Else
+    
+        'Build binomial stock price tree
+        Dim S(), P() As Double                                                  'Create stock price and payoff arrays
+        ReDim S(n + 1, n + 1), P(n + 1, n + 1) As Double                        'Starting from spot(t=1) to n(t=n+1) with 2t+1 values in each vector
+        S(1, 1) = Spot                                                          'Specify starting price
+        For i = 1 To n + 1                                                      'Loop down price vector
+            For j = i To n + 1                                                  'Loop across time
+                S(i, j) = S(1, 1) * u ^ (j - i) * d ^ (i - 1)                   'Iteration to compute up/down node price from spot
+            Next j
+        Next i
+        
+        'Build binomial payoff tree condition on call/put option
+        For i = 1 To n + 1                                                      'Loop down terminal payoff vector
+            Select Case CallPut
+            Case "Call"
+                P(i, n + 1) = Application.Max(S(i, n + 1) - K, 0)               'Terminal payoff for call option
+            Case "Put"
+                P(i, n + 1) = Application.Max(K - S(i, n + 1), 0)               'Terminal payoff for put option
+            End Select
+        Next i
+        
+        'Discount expected payoff back to t=0 condition on option style
+        For j = n To 1 Step -1                                                  'Loop from maturity back to t=0
+            For i = 1 To j                                                      'Loop down payoff vector for each t
+                Select Case AmerEuro
+                Case "Amer"
+                    If CallPut = "Call" Then
+                        P(i, j) = Application.Max(S(i, j) - K, Exp(-r * dt) _
+                        * (q * P(i, j + 1) + (1 - q) * P(i + 1, j + 1)))        'Local price for node in American call
+                    ElseIf CallPut = "Put" Then
+                        P(i, j) = Application.Max(K - S(i, j), Exp(-r * dt) _
+                        * (q * P(i, j + 1) + (1 - q) * P(i + 1, j + 1)))        'Local price for node in American put
+                    End If
+                Case "Euro"
+                    P(i, j) = Exp(-r * dt) * (q * P(i, j + 1) _
+                    + (1 - q) * P(i + 1, j + 1))                                'Local price for node in European option
+                End Select
+            Next i
+        Next j
+        TianBin = P(1, 1)                                                       'Return option price estimate
+    End If
+End Function
+
+
+'Function of trinomial option pricing for European and American vanilla options
+
+Function TrinomialTree(Spot, K, T, r, sigma, n, CallPut, AmerEuro)
+    
+    'Calculate up/down price movement and probabilities per change in time
+    dt = T / n                                                                  'Delta t = time to maturity/no. of steps
+    u = Exp(sigma * Sqr(2 * dt)): d = 1 / u                                     'Up/down price movement
+    pu = (Exp(r * dt / 2) - Exp(-sigma * Sqr(dt / 2))) ^ 2 / _
+            (Exp(sigma * Sqr(dt / 2)) - Exp(-sigma * Sqr(dt / 2))) ^ 2          'Probability of up movement
+    pd = (Exp(sigma * Sqr(dt / 2)) - Exp(r * dt / 2)) ^ 2 / _
+            (Exp(sigma * Sqr(dt / 2)) - Exp(-sigma * Sqr(dt / 2))) ^ 2          'Probability of down movement
+    pm = 1 - pu - pd                                                            'Probability of no movement
+    
+    'Check for no-arbitrage condition probabilities
+    If pu <= 0 Or pu >= 1 Or _
+       pm <= 0 Or pm >= 1 Or _
+       pd <= 0 Or pd >= 1 Or _
+       pu + pm + pd > 1 Then
+        TrinomialTree = CVErr(xlErrValue)                                       'Return error if no-arbitrage condition is violated
+    Else
+    
+        'Build trinomial stock price tree
+        Dim S(), P() As Double                                                  'Create stock price and payoff arrays
+        ReDim S(2 * n + 1, n + 1), P(2 * n + 1, n + 1) As Double                'Starting from spot(t=1) to n(t=n+1) with 2t+1 values in each vector
+        S(1, 1) = Spot                                                          'Specify starting price
+            For j = 2 To (n + 1)                                                'Loop across time
+                For i = 1 To (2 * j - 1)                                        'Loop down price vector
+                S(i, j) = S(1, 1) * u ^ j * d ^ i                               'Iteration to compute up/down node price from spot
+                Next i
+            Next j
+        
+        'Build trinomial payoff tree condition on call/put option
+        For i = 1 To (2 * n + 1)                                                'Loop down terminal payoff vector
+            Select Case CallPut
+                Case "Call"
+                P(i, n + 1) = Application.Max(S(i, n + 1) - K, 0)               'Local node payoff for call option tree
+                Case "Put"
+                P(i, n + 1) = Application.Max(K - S(i, n + 1), 0)               'Local node payoff for put option tree
+            End Select
+        Next i
+            
+        'Discount expected payoff back to t=0 condition on option style
+        For j = n To 1 Step -1                                                                  'Loop from maturity back to t=0
+            For i = 1 To (2 * j - 1)                                                            'Loop down payoff vector for each t
+            Select Case AmerEuro
+                Case "Amer"
+                If CallPut = "Call" Then
+                P(i, j) = Application.Max(S(i, j) - K, Exp(-r * dt) * _
+                        (pu * P(i, j + 1) + pm * P(i + 1, j + 1) + pd * P(i + 2, j + 1)))       'Local node price for American call
+                ElseIf CallPut = "Put" Then
+                P(i, j) = Application.Max(K - S(i, j), Exp(-r * dt) * _
+                        (pu * P(i, j + 1) + pm * P(i + 1, j + 1) + pd * P(i + 2, j + 1)))       'Local node price for American call
+                End If
+                Case "Euro"
+                P(i, j) = Exp(-r * dt) * _
+                        (pu * P(i, j + 1) + pm * P(i + 1, j + 1) + pd * P(i + 2, j + 1))        'Local node price for European option
+            End Select
+            Next i
+        Next j
+        TrinomialTree = P(1, 1)
+    End If
+End Function
+
+
+' Adjusted Barrier for Different Monitoring Windows
+
+Function AdjBarrier(S As Double, Barrier As Double, T As Double, sigma As Double, MonFreq As String)
+    Dim Sign As Integer, beta As Double
+    beta = 0.5826                                                   'Sensitivity to change volatility measured in different time interval from Broadie, Glasserman, and Kou (1997, 1999)
+    If Barrier > S Then
+        Sign = 1                                                    'Indicator of barrier for up option when Barrier>S
+    Else
+        Sign = -1                                                   'Indicator of barrier for down option when Barrier<S
+    End If
+    
+    'Adjust for differing monitoring frequency
+    Select Case MonFreq
+        Case "Continuously": AdjBarrier = Barrier                                               'Retain continuously-monitoring barrier
+        Case "Hourly": AdjBarrier = Barrier * Exp(Sign * beta * sigma * Sqr(1 / (24 * 365))) 'Hourly-monitoring barrier
+        Case "Daily": AdjBarrier = Barrier * Exp(Sign * beta * sigma * Sqr(1 / 365))          'Daily-monitoring barrier
+        Case "Weekly": AdjBarrier = Barrier * Exp(Sign * beta * sigma * Sqr(1 / 52))          'Weekly-monitoring barrier
+        Case "Monthly": AdjBarrier = Barrier * Exp(Sign * beta * sigma * Sqr(1 / 12))         'Monthly-monitoring barrier
+    End Select
+End Function
+
+
+' Tian's Flexible Bianomial Tree for Barrier Option Pricing
+
+Function TianBinDBarrier(S As Double, k As Double, AdjBar As Double, T As Double, r As Double, sigma As Double, n As Integer, OptType As String, CallPut As String)
+Dim dt As Double, u0 As Double, d0 As Double, q0 As Double, N0 As Double, lambda As Double
+Dim u As Double, d As Double, q As Double, PU As Double
+Dim i As Integer, j As Integer
+
+    If (OptType = "DO" Or OptType = "DI") And AdjBar > S Then
+        MsgBox "Error: Barrier must be less than the S price for a Down-and-out or Down-and-in option"    'Alert for knocked barrier for down option
+        TianBinDBarrier = CVErr(xlErrValue)
+        Exit Function
+    ElseIf (OptType = "UO" And OptType = "UI") And AdjBar < S Then
+        MsgBox "Error: Barrier must be less than the S price for an Up-and-out or Up-and-in option"       'Alert for knocted barrier for up option
+    End If
+    
+    dt = T / n                                                                  'Period per step
+    u0 = Exp(sigma * Sqr(dt)): d0 = 1 / u0                                      'Unadjusted up/down move
+    q0 = (Exp(r * dt) - d0) / (u0 - d0)                                         'Unadjusted probability of up move
+    N0 = Round(Log(AdjBar / S) / Log(d0))                                       'Barrier expected to be hit after N0 step, the nearest integer of log function
+    lambda = (Log(AdjBar / S) + N0 * sigma * Sqr(dt)) / (N0 * sigma ^ 2 * dt)   'Tilting parameter
+    u = Exp(sigma * Sqr(dt) + lambda * sigma ^ 2 * dt)                          'Tilted up move
+    d = Exp(-sigma * Sqr(dt) + lambda * sigma ^ 2 * dt)                         'Tilted down move
+    q = (Exp(r * dt) - d) / (u - d)                                             'Adjusted probability of up move
+    
+    'Build stock price tree
+    Dim SP(), OP() As Double                                                        'Stock price and option payoff arrays
+    ReDim SP(n + 1, n + 1), OP(n + 1, n + 1)
+    SP(1, 1) = S                                                                    'Spot as initial value
+    For j = 1 To UBound(SP, 2)                                                      'Loop over periods
+        For i = 1 To j
+            If j <= N0 + 1 Then
+                SP(i, j) = SP(1, 1) * u ^ (j - i) * d ^ (i - 1)                     'First stage asset price with tilting to ensure nodes lie on barrier
+            Else
+                SP(i, j) = SP(1, 1) * d ^ (N0) * u0 ^ (j - i) * d0 ^ (i - N0 - 1)   'Second stage asset price with zero tilting
+            End If
+            SP(i, j) = Round(SP(i, j) * 10000, 5) / 10000                           'Smoothing stock price
+        Next i
+    Next j
+    
+    'Build option payoff tree
+    For i = 1 To UBound(SP, 1)
+        If (SP(i, n + 1) <= AdjBar And (OptType = "DI" Or OptType = "DO")) _
+        Or (SP(i, n + 1) >= AdjBar And (OptType = "UI" Or OptType = "UO")) _
+        Then
+            OP(i, n + 1) = 0                                                        'U/D payoff for stock price with respected to the barrier
+        Else
+            Select Case CallPut
+                Case "Call": OP(i, n + 1) = Application.Max(SP(i, n + 1) - k, 0)    'Terminal call payoff if not knocked out
+                Case "Put": OP(i, n + 1) = Application.Max(k - SP(i, n + 1), 0)     'Terminal put payoff if not knocked out
+            End Select
+        End If
+    Next i
+    
+    For j = n To 1 Step -1
+        For i = 1 To j
+            If (SP(i, j) <= AdjBar And (OptType = "DI" Or OptType = "DO")) _
+            Or (SP(i, j) >= AdjBar And (OptType = "UI" Or OptType = "UO")) _
+            Then
+                OP(i, j) = 0                                                        'U/D payoff for stock price with respected to the barrier
+            Else
+                If j <= N0 Then
+                    PU = q                                                                  'Stage 1 up probability if not knocked out
+                Else
+                    PU = q0                                                                 'Stage 2 up probability if not knocked out
+                End If
+                OP(i, j) = Exp(-r * dt) * (PU * OP(i, j + 1) + (1 - PU) * OP(i + 1, j + 1)) 'Option value as discount expcted payoff
+            End If
+        Next i
+    Next j
+    If OptType = "DO" Or OptType = "UO" Then                                                'Differenciate prices by parity that sum of in-and-out option equals vanilla option payoff
+        TianBinDBarrier = OP(1, 1)
+    Else
+        TianBinDBarrier = CRREuro(S, k, T, r, sigma, n, CallPut) - OP(1, 1)
+    End If
+End Function
+
+
+
+
