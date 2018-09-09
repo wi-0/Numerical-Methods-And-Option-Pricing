@@ -2,6 +2,29 @@
 Option Explicit
 
 
+*** The following definitions cover both the definitions for the functions in this file and those in the example files ***
+
+' In this file
+Dim n As Integer, n0 As Integer, i As Integer, j As Integer                             'No. of steps for prices, lambda, looping variables
+Dim Spot As Single, K As Single, T As Single, r As Single, sigma As Double              'Parameter inputs
+Dim dt As Single, u As Double, d As Double, u0 As Double, d0 As Double                  'Delta t and up/down movements for security prices and lambda respectively
+Dim q As Double                                                                         'Probability of up movement
+Dim pu As Double, pd As Double, pm As Double                                            'Probability of up/down/no security price movement in trinomial ree
+Dim CallPut As String, AmerEuro As String, tree_model As String                         'Types of call/put, style, tree model
+Dim lambda_input As Single, lambda As Double                                            'Specified lambda and Tian's lambda
+
+' In example files
+Dim n_from_StdOpt As Integer, n_to_StdOpt As Integer, n_increment_StdOpt As Integer     'Starting, ending and increment of steps in option pricing
+Dim n_from_CNOpt As Integer, n_to_CNOpt As Integer, n_increment_CNOpt As Integer        'Starting, ending and increment of steps in cash-or-nothing option pricing
+Dim n_from_MeanSD As Integer, n_to_MeanSD As Integer, n_increment_MeanSD As Integer     'Steps parameter of stock price tree for mean and SD calculation
+Dim row_n As Integer, column_option As Integer, column_method As Integer                'Row and column indicators
+Dim Su As Double, Sd As Double, mean_S1 As Double, SD_S1 As Double                      'up/down node price, mean and standard deviation of stock in 1st period
+Dim common_payoff As Single                                                             'Common payoff of cash-or-nothing option
+Dim MeanSD As String                                                                    'Option for mean/Standard deviation
+
+
+
+*** Main Functions ***
 
 ' CRR Binomial Tree for European Vanilla Option
 
