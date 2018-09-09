@@ -1,0 +1,177 @@
+Option Explicit
+
+
+
+' Black-Scholes European Option
+
+Function BS_Euro(S As Double, k As Double, r As Double, T As Double, sigma As Double, CallPut As String)
+    Dim CallPrice As Double, d1 As Double, d2 As Double
+    d1 = (Log(S / k) + (r + 0.5 * sigma ^ 2) * T) / (sigma * Sqr(T))        'Calculate d1 of Black-Scholes
+    d2 = d1 - sigma * Sqr(T)                                                'Calculate d2 of Black-Scholes
+    CallPrice = S * cdfNorm(d1) - Exp(-r * T) * k * cdfNorm(d2)             'Black-Scholes call option price
+    Select Case CallPut                                                     'Based on Call/Put option
+        Case "Call": BS_Euro = CallPrice                                    'Return call price
+        Case "Put": BS_Euro = k * Exp(-r * T) - S + CallPrice               'Calculate put price
+    End Select
+End Function
+
+
+' Black-Scholes European Asset-or-Nothing Option
+
+Function BS_AssetNth(S As Double, k As Double, r As Double, T As Double, sigma As Double, CallPut As String)
+    Dim d1 As Double
+    d1 = (Log(S / k) + (r + 0.5 * sigma ^ 2) * T) / (sigma * Sqr(T))        'd1 as BS for vanilla option
+    Select Case CallPut
+        Case "Call": BS_AssetNth = S * cdfNorm(d1)                          'European asset-or-nth call price
+        Case "Put": BS_AssetNth = S * cdfNorm(-d1)                          'European asset-or-nth put price
+    End Select
+End Function
+
+
+' Black-Scholes European Option with Discrete Dividend
+
+Function BS_EuroDiv(S As Double, k As Double, r As Double, T As Double, sigma As Double, CallPut As String, TDiv As Range, Div As Range, rDiv As Range)
+    Dim PVD As Double, SxD As Double                        'Define variables for present value of dividends and ex-PVD spot price
+    PVD = PVDiv(T, TDiv, Div, rDiv)                         'Calculate PVD
+    SxD = S - PVD                                           'Calculate ex-PVD spot
+    BS_EuroDiv = BS_Euro(SxD, k, r, T, sigma, CallPut)      'BS with discrete dividend is BS based on SxD
+End Function
+
+
+' Black-Scholes American/European Asset-or-Nothing Option with Discrete Dividend
+
+Function BS_AN_AmEuDiv(S As Double, k As Double, r As Double, T As Double, sigma As Double, CallPut As String, AmerEuro As String, TDiv As Range, Div As Range, rDiv As Range)
+    Dim PVD As Double, SxD As Double, EEPayoff As Double            'Define PV of dividend, ex-PVD spot and early-exercise option payoff
+    Dim i  As Integer, j As Integer                                 'Iteration parameter
+    Dim nDiv As Integer, nTDiv As Integer, nrDiv As Integer         'Range size of divided schedule component
+    
+    ' Extract range size of dividend schedule
+    nDiv = Application.Count(Div)                                   'No. of dividend
+    nTDiv = Application.Count(TDiv)                                 'No. of ex-dividend time
+    nrDiv = Application.Count(rDiv)                                 'No. of discount rate per dividend
+    
+    ' Check for range size consistency
+    If nDiv <> nTDiv Or nDiv <> nrDiv Then                              'If dividend schedule input sizes are inconsistent
+            MsgBox ("Inconsistent range sizes in Dividend Schedule.")   'Alert for inconsistency
+            BS_AN_AmEuDiv = CVErr(xlErrValue)                                   'Return error if inconsistent
+            Exit Function                                               'Exit function for error
+    End If
+    
+    ' Data validation for numerical and chronological inputs
+    For i = 1 To nDiv
+        If IsNumeric(TDiv(i)) = False Or IsNumeric(Div(i)) = False Or IsNumeric(rDiv(i)) = False Then   'Check for numerical inputs
+            MsgBox ("Missing or inappropriate value in Dividend Schedule.")                             'Alert for non-numerical input
+            BS_AN_AmEuDiv = CVErr(xlErrValue)                               'Return error if non-numerical input exists
+            Exit Function                                           'Exit function for error
+        Else
+            If i > 1 Then
+                If TDiv(i) < TDiv(i - 1) Then                       'Check for dividend time order
+                MsgBox ("Please check for chronological order in Dividend Schedule.")       'Alert for non-chronological order
+                BS_AN_AmEuDiv = CVErr(xlErrValue)                           'Return error if dividend order is non-chronological
+                Exit Function                                       'Exit function for error
+                End If
+            End If
+        End If
+    Next i
+    
+    ' Calculate asset-or-nth American/European option price with discrete dividends
+    
+    Select Case AmerEuro
+    Case "Euro"
+        PVD = 0
+        For i = 1 To nDiv
+            If (TDiv(i) <= T) Then: PVD = PVD + Div(i) * Exp(-rDiv(i) * TDiv(i))        'PVD of dividends before maturity
+        Next i
+        SxD = S - PVD                                                                   'Ex-PVD spot
+        BS_AN_AmEuDiv = BS_AssetNth(SxD, k, r, T, sigma, CallPut)                       'European BS asset-or-nth price
+    Case "Amer"
+        Dim MaxOP() As Double                                                               'Option payoff array for value just before ex-dividend
+        ReDim MaxOP(1 To nDiv + 1) As Double
+        For j = 1 To nDiv + 1
+            PVD = 0
+            For i = 1 To j
+                If (i < j) Then                                                             'Just before ex-dividend
+                    If (TDiv(i) <= T) Then: PVD = PVD + Div(i) * Exp(-rDiv(i) * TDiv(i))    'PVD of previous dividends prior to each ex-dividend
+                End If
+            Next i
+            SxD = S - PVD
+            If (j < nDiv + 1) Then
+                MaxOP(j) = BS_AssetNth(SxD, k, r, TDiv(j), sigma, CallPut)                  'Option value just before each ex-dividend date
+            Else
+                MaxOP(j) = BS_AssetNth(SxD, k, r, T, sigma, CallPut)                        'Terminal option value
+            End If
+        Next j
+        EEPayoff = 0
+        Select Case CallPut
+            Case "Call": If S > k Then EEPayoff = S                                         'Immediate payoff if early exercised for ITM call
+            Case "Put": If S < k Then EEPayoff = S                                          'Immediate payoff if early exercised for ITM put
+        End Select
+        BS_AN_AmEuDiv = Application.Max(MaxOP, EEPayoff)                                    'BS asset-or-nth value as a maximum of early exercise payoff and payoffs just before each ex-dividend for ATM/OTM option
+    End Select
+End Function
+
+' Black-Scholes Delta with Discrete Dividend
+
+Function BS_DeltaDiv(S As Double, k As Double, r As Double, T As Double, sigma As Double, CallPut As String, TDiv As Range, Div As Range, rDiv As Range)
+    Dim SxD As Double, d As Double
+    SxD = S - PVDiv(T, TDiv, Div, rDiv)                                     'Using ex-PVD spot
+    d = (Log(SxD / k) + T * (r + 0.5 * sigma ^ 2)) / (sigma * Sqr(T))
+    Select Case CallPut
+        Case "Call": BS_DeltaDiv = cdfNorm(d)                               'BS delta with discrete dividend for call
+        Case "Put": BS_DeltaDiv = cdfNorm(d) - 1                            'BS delta with discrete dividend for put
+    End Select
+End Function
+
+' Black-Scholes Gamma with Discrete Dividend
+
+Function BS_GammaDiv(S As Double, k As Double, r As Double, T As Double, sigma As Double, TDiv As Range, Div As Range, rDiv As Range)
+    Dim SxD As Double, d As Double
+    SxD = S - PVDiv(T, TDiv, Div, rDiv)                                     'Using ex-PVD spot
+    d = (Log(SxD / k) + T * (r + 0.5 * sigma ^ 2)) / (sigma * Sqr(T))
+    BS_GammaDiv = pdfNorm(d) / SxD / sigma / Sqr(T)                         'BS gamma with discrete dividend for call and put
+End Function
+
+' Black-Scholes Vega
+
+Function BS_Vega(S As Double, k As Double, r As Double, T As Double, sigma As Double)
+    Dim d As Double
+    d = (Log(S / k) + T * (r + 0.5 * sigma ^ 2)) / (sigma * Sqr(T))
+    BS_Vega = S * pdfNorm(d) * Sqr(T)                                       'BS vega without dividend
+End Function
+
+' Black-Scholes Vega with Discrete Dividend
+
+Function BS_VegaDiv(S As Double, k As Double, r As Double, T As Double, sigma As Double, TDiv As Range, Div As Range, rDiv As Range)
+    Dim SxD As Double, d As Double
+    SxD = S - PVDiv(T, TDiv, Div, rDiv)                                     'Using ex-PVD spot
+    d = (Log(SxD / k) + T * (r + 0.5 * sigma ^ 2)) / (sigma * Sqr(T))
+    BS_VegaDiv = SxD * pdfNorm(d) * Sqr(T)                                  'BS vega with discrete dividend for call and put
+End Function
+
+' Black-Scholes Rho with Discrete Dividend
+
+Function BS_RhoDiv(S As Double, k As Double, r As Double, T As Double, sigma As Double, CallPut As String, TDiv As Range, Div As Range, rDiv As Range)
+    Dim SxD As Double, d As Double
+    SxD = S - PVDiv(T, TDiv, Div, rDiv)                                             'Using ex-PVD spot
+    d = (Log(SxD / k) + T * (r + 0.5 * sigma ^ 2)) / (sigma * Sqr(T))
+    Select Case CallPut
+        Case "Call": BS_RhoDiv = T * k * Exp(-r * T) * cdfNorm(d - sigma * Sqr(T))  'BS rho with discrete div for call
+        Case "Put": BS_RhoDiv = -T * k * Exp(-r * T) * cdfNorm(sigma * Sqr(T) - d)  'BS rho with dicrete div fo put
+    End Select
+End Function
+
+' Black-Scholes Theta with Discrete Dividend
+
+Function BS_ThetaDiv(S As Double, k As Double, r As Double, T As Double, sigma As Double, CallPut As String, TDiv As Range, Div As Range, rDiv As Range)
+    Dim SxD As Double, d As Double
+    SxD = S - PVDiv(T, TDiv, Div, rDiv)
+    d = (Log(SxD / k) + T * (r + 0.5 * sigma ^ 2)) / (sigma * Sqr(T))
+    Select Case CallPut
+        Case "Call": BS_ThetaDiv = -SxD * pdfNorm(d) * sigma / 2 / Sqr(T) _
+                - r * k * Exp(-r * T) * cdfNorm(d - sigma * Sqr(T))                 'BS theta with discrete div for call
+        Case "Put": BS_ThetaDiv = -SxD * pdfNorm(d) * sigma / 2 / Sqr(T) _
+                + r * k * Exp(-r * T) * cdfNorm(sigma * Sqr(T) - d)                 'BS theta with discrete div for put
+    End Select
+End Function
+
+
