@@ -1,0 +1,538 @@
+Option Base 1
+
+' ---------------------------------- COMPLEX LIBRARY ----------------------------------
+
+Public Type cNum
+    rP As Double
+    iP As Double
+End Type
+Function set_cNum(rPart, iPart) As cNum
+    set_cNum.rP = rPart
+    set_cNum.iP = iPart
+End Function
+Function cNumProd(cNum1 As cNum, cNum2 As cNum) As cNum
+    cNumProd.rP = (cNum1.rP * cNum2.rP) - (cNum1.iP * cNum2.iP)
+    cNumProd.iP = (cNum1.rP * cNum2.iP) + (cNum1.iP * cNum2.rP)
+End Function
+Function cNumConj(cNum1 As cNum) As cNum
+    cNumConj.rP = cNum1.rP
+    cNumConj.iP = -cNum1.iP
+End Function
+Function cNumDiv(cNum1 As cNum, cNum2 As cNum) As cNum
+    Dim conj_cNum2 As cNum
+    conj_cNum2 = cNumConj(cNum2)
+    cNumDiv.rP = (cNum1.rP * conj_cNum2.rP - cNum1.iP * conj_cNum2.iP) / (cNum2.rP ^ 2 + cNum2.iP ^ 2)
+    cNumDiv.iP = (cNum1.rP * conj_cNum2.iP + cNum1.iP * conj_cNum2.rP) / (cNum2.rP ^ 2 + cNum2.iP ^ 2)
+End Function
+Function cNumAdd(cNum1 As cNum, cNum2 As cNum) As cNum
+    cNumAdd.rP = cNum1.rP + cNum2.rP
+    cNumAdd.iP = cNum1.iP + cNum2.iP
+End Function
+Function cNumSub(cNum1 As cNum, cNum2 As cNum) As cNum
+    cNumSub.rP = cNum1.rP - cNum2.rP
+    cNumSub.iP = cNum1.iP - cNum2.iP
+End Function
+Function cNumSqrt(cNum1 As cNum) As cNum
+    r = Sqr(cNum1.rP ^ 2 + cNum1.iP ^ 2)
+    y = Atn(cNum1.iP / cNum1.rP)
+    cNumSqrt.rP = Sqr(r) * Cos(y / 2)
+    cNumSqrt.iP = Sqr(r) * Sin(y / 2)
+End Function
+Function cNumPower(cNum1 As cNum, n As Double) As cNum
+    r = Sqr(cNum1.rP ^ 2 + cNum1.iP ^ 2)
+    y = Atn(cNum1.iP / cNum1.rP)
+    cNumPower.rP = r ^ n * Cos(y * n)
+    cNumPower.iP = r ^ n * Sin(y * n)
+End Function
+Function cNumExp(cNum1 As cNum) As cNum
+    cNumExp.rP = Exp(cNum1.rP) * Cos(cNum1.iP)
+    cNumExp.iP = Exp(cNum1.rP) * Sin(cNum1.iP)
+End Function
+Function cNumSq(cNum1 As cNum) As cNum
+    cNumSq = cNumProd(cNum1, cNum1)
+End Function
+Function cNumReal(cNum1 As cNum) As Double
+    cNumReal = cNum1.rP
+End Function
+Function cNumLn(cNum1 As cNum) As cNum
+    r = (cNum1.rP ^ 2 + cNum1.iP ^ 2) ^ 0.5
+    theta = Atn(cNum1.iP / cNum1.rP)
+    cNumLn.rP = Application.Ln(r)
+    cNumLn.iP = theta
+End Function
+Function cNumPowercNum(cNum1 As cNum, cNum2 As cNum) As cNum
+    r = Sqr(cNum1.rP ^ 2 + cNum1.iP ^ 2)
+    y = Atn(cNum1.iP / cNum1.rP)
+    cNumPowercNum.rP = r ^ cNum2.rP * Exp(-cNum2.iP * y) * Cos(cNum2.rP * y + cNum2.iP * Log(r))
+    cNumPowercNum.iP = r ^ cNum2.rP * Exp(-cNum2.iP * y) * Sin(cNum2.rP * y + cNum2.iP * Log(r))
+End Function
+
+
+' Heston Option Price Using Trapezoidal Rule with Combined Integrand
+
+Function HestonSVCPF(kappa As Double, theta As Double, lambda As Double, rho As Double, gamma As Double, tau As Double, k As Double, S As Double, r As Double, v As Double, CallPut As String)
+Dim IntP1(1001) As Double, IntP2(1001) As Double, IntCP(1001) As Double, Intphi(1001) As Double
+Dim CP As Double, phi As Double, i As Integer, HestonSVCall As Double
+
+i = 1
+For phi = 0.0001 To 100.0001 Step 0.1
+Intphi(i) = phi
+IntP1(i) = HestonP1(phi, kappa, theta, lambda, rho, gamma, tau, k, S, r, v)
+IntP2(i) = HestonP2(phi, kappa, theta, lambda, rho, gamma, tau, k, S, r, v)
+IntCP(i) = S * IntP1(i) - k * Exp(-r * tau) * IntP2(i)
+i = i + 1
+Next phi
+CP = (1 / Pi) * TRAPnumint(Intphi, IntCP)
+HestonSVCall = 0.5 * (S - k * Exp(-r * tau)) + CP
+If CallPut = "Call" Then
+HestonSVCPF = HestonSVCall
+ElseIf CallPut = "Put" Then
+HestonSVCPF = HestonSVCall + k * Exp(-r * tau) - S
+End If
+End Function
+
+
+' Heston Option Price Using 10-Point Gauss. Legendre Quadrature Rule with Combined Integrand
+
+Function HestonSVGL10(kappa As Double, theta As Double, lambda As Double, rho As Double, gamma As Double, tau As Double, k As Double, S As Double, r As Double, v As Double, CallPut As String)
+
+Dim IntCPP As Double, IntCPM As Double, P1P As Double, P1M As Double, P2P As Double, P2M As Double, CP As Double
+Dim i As Double, HestonSVCall As Double
+Dim x(5) As Double, dx As Double, w(5) As Double, x_range As Double, x_mid As Double
+
+
+x(1) = 0.1488743389: x(2) = 0.4333953941
+x(3) = 0.6794095682: x(4) = 0.8650633666
+x(5) = 0.9739065285
+w(1) = 0.2955242247: w(2) = 0.2692667193
+w(3) = 0.2190863625: w(4) = 0.1494513491
+w(5) = 0.0666713443
+x_mid = 0.5 * 100: x_range = 0.5 * 100
+IntCPP = 0: IntCPM = 0: P1P = 0: P1M = 0: P2P = 0: P2M = 0: CP = 0                  'Initial value of integrand
+
+For i = 1 To 5
+dx = x_range * x(i)
+
+'Calculate P1 and P2 for upper and lower ranges
+P1P = HestonP1(x_mid + dx, kappa, theta, lambda, rho, gamma, tau, k, S, r, v)
+P2P = HestonP2(x_mid + dx, kappa, theta, lambda, rho, gamma, tau, k, S, r, v)
+P1M = HestonP1(x_mid - dx, kappa, theta, lambda, rho, gamma, tau, k, S, r, v)
+P2M = HestonP2(x_mid - dx, kappa, theta, lambda, rho, gamma, tau, k, S, r, v)
+
+'Boundary of P1 and P2
+If P1P > 1 Then P1P = 1: If P1P < 0 Then P1P = 0
+If P2P > 1 Then P2P = 1: If P2P < 0 Then P2P = 0
+If P1M > 1 Then P1M = 1: If P1M < 0 Then P1M = 0
+If P2M > 1 Then P2M = 1: If P2M < 0 Then P2M = 0
+
+'Combined integrad for upper and lower ranges
+IntCPP = S * P1P - k * Exp(-r * tau) * P2P
+IntCPM = S * P1M - k * Exp(-r * tau) * P2M
+CP = CP + w(i) * (IntCPP + IntCPM)
+Next i
+CP = CP * x_range
+CP = 0.5 + (1 / Pi) * CP
+
+
+HestonSVCall = 0.5 * (S - k * Exp(-r * tau)) + CP
+If CallPut = "Call" Then
+HestonSVGL10 = HestonSVCall
+ElseIf CallPut = "Put" Then
+HestonSVGL10 = HestonSVCall + k * Exp(-r * tau) - S
+End If
+End Function
+
+' Heston Option Price on Dividend-Paying Stock Using 10-Point GL Quadrature with Combined Integrand
+
+Function Heston_DivEu_GL10(kappa As Double, theta As Double, lambda As Double, rho As Double, gamma As Double, tau As Double, k As Double, S As Double, r As Double, v As Double, CallPut As String, TDiv As Range, Div As Range, rDiv As Range)
+    Dim PVD As Double, SxD As Double
+    PVD = PVDiv(tau, TDiv, Div, rDiv)
+    SxD = S - PVD
+    Heston_DivEu_GL10 = HestonSVGL10(kappa, theta, lambda, rho, gamma, tau, k, SxD, r, v, CallPut)
+End Function
+
+
+' Heston Option Price on Dividend-Paying Stock Using Trapezoidal Method with Combined Integrand
+
+Function Heston_DivEu_Trap(kappa As Double, theta As Double, lambda As Double, rho As Double, gamma As Double, tau As Double, k As Double, S As Double, r As Double, v As Double, CallPut As String, TDiv As Range, Div As Range, rDiv As Range)
+    Dim PVD As Double, SxD As Double
+    PVD = PVDiv(tau, TDiv, Div, rDiv)
+    SxD = S - PVD
+    Heston_DivEu_Trap = HestonSVCPF(kappa, theta, lambda, rho, gamma, tau, k, SxD, r, v, CallPut)
+End Function
+
+
+' Integrand for P1
+
+Function HestonP1(phi As Double, kappa As Double, theta As Double, lambda As Double, rho As Double, gamma As Double, tau As Double, k As Double, S As Double, r As Double, v As Double)
+Dim tmp_f1 As cNum, f1 As cNum, d1 As cNum, g1 As cNum, DD1 As cNum, CC1 As cNum, b1 As cNum
+Dim DD1_1 As cNum, DD1_2 As cNum, DD1_3 As cNum, CC1_1 As cNum, CC1_2 As cNum, CC1_3 As cNum, CC1_4 As cNum
+
+Dim gtest As cNum, t1 As cNum, t2 As cNum, t3 As cNum
+Dim tt1 As Variant, mu1 As Double
+
+mu1 = 0.5
+b1 = set_cNum(kappa + lambda - rho * gamma, 0)
+d1 = cNumSqrt(cNumSub(cNumSq(cNumSub(set_cNum(0, rho * gamma * phi), b1)), cNumSub(set_cNum(0, gamma ^ 2 * 2 * mu1 * phi), set_cNum(gamma ^ 2 * phi ^ 2, 0))))
+g1 = cNumDiv(cNumAdd(cNumSub(b1, set_cNum(0, rho * gamma * phi)), d1), cNumSub(cNumSub(b1, set_cNum(0, rho * gamma * phi)), d1))
+DD1_1 = cNumDiv(cNumAdd(cNumSub(b1, set_cNum(0, rho * gamma * phi)), d1), set_cNum(gamma ^ 2, 0))
+DD1_2 = cNumSub(set_cNum(1, 0), cNumExp(cNumProd(d1, set_cNum(tau, 0))))
+DD1_3 = cNumSub(set_cNum(1, 0), cNumProd(g1, cNumExp(cNumProd(d1, set_cNum(tau, 0)))))
+DD1 = cNumProd(DD1_1, cNumDiv(DD1_2, DD1_3))
+CC1_1 = set_cNum(0, r * phi * tau)
+CC1_2 = set_cNum((kappa * theta) / (gamma ^ 2), 0)
+CC1_3 = cNumProd(cNumAdd(cNumSub(b1, set_cNum(0, rho * gamma * phi)), d1), set_cNum(tau, 0))
+CC1_4 = cNumProd(set_cNum(2, 0), cNumLn(cNumDiv(cNumSub(set_cNum(1, 0), cNumProd(g1, cNumExp(cNumProd(d1, set_cNum(tau, 0))))), cNumSub(set_cNum(1, 0), g1))))
+CC1 = cNumAdd(CC1_1, cNumProd(CC1_2, cNumSub(CC1_3, CC1_4)))
+f1 = cNumExp(cNumAdd(cNumAdd(CC1, cNumProd(DD1, set_cNum(v, 0))), set_cNum(0, phi * Application.Ln(S))))
+
+HestonP1 = cNumReal(cNumDiv(cNumProd(cNumExp(set_cNum(0, -phi * Application.Ln(k))), f1), set_cNum(0, phi)))
+
+End Function
+
+
+' Integrand for P2
+
+Function HestonP2(phi As Double, kappa As Double, theta As Double, lambda As Double, rho As Double, gamma As Double, tau As Double, k As Double, S As Double, r As Double, v As Double)
+Dim tmp_f1 As cNum, f1 As cNum, d1 As cNum, g1 As cNum, DD1 As cNum, CC1 As cNum, b1 As cNum, testp As cNum
+Dim DD1_1 As cNum, DD1_2 As cNum, DD1_3 As cNum, CC1_1 As cNum, CC1_2 As cNum, CC1_3 As cNum, CC1_4 As cNum
+Dim mu1 As Double
+
+mu1 = -0.5
+b1 = set_cNum(kappa + lambda, 0)
+d1 = cNumSqrt(cNumSub(cNumSq(cNumSub(set_cNum(0, rho * gamma * phi), b1)), cNumSub(set_cNum(0, gamma ^ 2 * 2 * mu1 * phi), set_cNum(gamma ^ 2 * phi ^ 2, 0))))
+g1 = cNumDiv(cNumAdd(cNumSub(b1, set_cNum(0, rho * gamma * phi)), d1), cNumSub(cNumSub(b1, set_cNum(0, rho * gamma * phi)), d1))
+DD1_1 = cNumDiv(cNumAdd(cNumSub(b1, set_cNum(0, rho * gamma * phi)), d1), set_cNum(gamma ^ 2, 0))
+DD1_2 = cNumSub(set_cNum(1, 0), cNumExp(cNumProd(d1, set_cNum(tau, 0))))
+DD1_3 = cNumSub(set_cNum(1, 0), cNumProd(g1, cNumExp(cNumProd(d1, set_cNum(tau, 0)))))
+DD1 = cNumProd(DD1_1, cNumDiv(DD1_2, DD1_3))
+CC1_1 = set_cNum(0, r * phi * tau)
+CC1_2 = set_cNum((kappa * theta) / (gamma ^ 2), 0)
+CC1_3 = cNumProd(cNumAdd(cNumSub(b1, set_cNum(0, rho * gamma * phi)), d1), set_cNum(tau, 0))
+CC1_4 = cNumProd(set_cNum(2, 0), cNumLn(cNumDiv(cNumSub(set_cNum(1, 0), cNumProd(g1, cNumExp(cNumProd(d1, set_cNum(tau, 0))))), cNumSub(set_cNum(1, 0), g1))))
+CC1 = cNumAdd(CC1_1, cNumProd(CC1_2, cNumSub(CC1_3, CC1_4)))
+
+f1 = cNumExp(cNumAdd(cNumAdd(CC1, cNumProd(DD1, set_cNum(v, 0))), set_cNum(0, phi * Application.Ln(S))))
+
+HestonP2 = cNumReal(cNumDiv(cNumProd(cNumExp(set_cNum(0, -phi * Application.Ln(k))), f1), set_cNum(0, phi)))
+
+End Function
+
+
+' Heston Delta with discrete dividend
+
+Function HDelta(kappa As Double, theta As Double, lambda As Double, rho As Double, gamma As Double, tau As Double, k As Double, S As Double, r As Double, v As Double, CallPut As String, TDiv As Range, Div As Range, rDiv As Range)
+Dim SxD As Double
+SxD = S - PVDiv(tau, TDiv, Div, rDiv)
+Dim P1_int(1001) As Double, P2_int(1001) As Double, phi_int(1001) As Double
+Dim P1 As Double, P2 As Double, phi As Double, xg(16) As Double, wg(16) As Double
+Dim cnt As Integer, HestonC As Double
+cnt = 1
+
+For phi = 0.0001 To 100.0001 Step 0.1
+    phi_int(cnt) = phi
+    P1_int(cnt) = HestonP1(phi, kappa, theta, lambda, rho, gamma, tau, k, SxD, r, v)
+    cnt = cnt + 1
+Next phi
+
+P1 = 0.5 + (1 / Pi) * TRAPnumint(phi_int, P1_int)
+
+If P1 < 0 Then P1 = 0
+If P1 > 1 Then P1 = 1
+
+If CallPut = "Call" Then
+    HDelta = P1
+ElseIf CallPut = "Put" Then
+    HDelta = P1 - 1
+End If
+End Function
+
+
+' Heston Rho with discrete dividend
+
+Function HRho(kappa As Double, theta As Double, lambda As Double, rho As Double, gamma As Double, tau As Double, k As Double, S As Double, r As Double, v As Double, CallPut As String, TDiv As Range, Div As Range, rDiv As Range)
+Dim SxD As Double
+SxD = S - PVDiv(tau, TDiv, Div, rDiv)
+Dim P1_int(1001) As Double, P2_int(1001) As Double, phi_int(1001) As Double
+Dim P1 As Double, P2 As Double, phi As Double, xg(16) As Double, wg(16) As Double
+Dim cnt As Integer, HestonC As Double
+cnt = 1
+
+For phi = 0.0001 To 100.0001 Step 0.1
+    phi_int(cnt) = phi
+    P2_int(cnt) = HestonP2(phi, kappa, theta, lambda, rho, gamma, tau, k, SxD, r, v)
+    cnt = cnt + 1
+Next phi
+
+P2 = 0.5 + (1 / Pi) * TRAPnumint(phi_int, P2_int)
+If P2 < 0 Then P2 = 0
+If P2 > 1 Then P2 = 1
+If CallPut = "Call" Then
+    HRho = k * Exp(-r * tau) * tau * P2
+ElseIf CallPut = "Put" Then
+    HRho = k * Exp(-r * tau) * tau * (P2 - 1)
+End If
+End Function
+
+
+' Integrand for derivative dP1/dS, used for Gamma
+
+Function dP1_dS(phi As Double, kappa As Double, theta As Double, lambda As Double, rho As Double, gamma As Double, tau As Double, k As Double, S As Double, r As Double, v As Double)
+Dim tmp_f1 As cNum, f1 As cNum, d1 As cNum, g1 As cNum, DD1 As cNum, CC1 As cNum, b1 As cNum
+Dim DD1_1 As cNum, DD1_2 As cNum, DD1_3 As cNum, CC1_1 As cNum, CC1_2 As cNum, CC1_3 As cNum, CC1_4 As cNum
+
+Dim gtest As cNum, t1 As cNum, t2 As cNum, t3 As cNum
+Dim tt1 As Variant, mu1 As Double
+
+mu1 = 0.5
+b1 = set_cNum(kappa - lambda - rho * gamma, 0)
+d1 = cNumSqrt(cNumSub(cNumSq(cNumSub(set_cNum(0, rho * gamma * phi), b1)), cNumSub(set_cNum(0, gamma ^ 2 * 2 * mu1 * phi), set_cNum(gamma ^ 2 * phi ^ 2, 0))))
+g1 = cNumDiv(cNumAdd(cNumSub(b1, set_cNum(0, rho * gamma * phi)), d1), cNumSub(cNumSub(b1, set_cNum(0, rho * gamma * phi)), d1))
+DD1_1 = cNumDiv(cNumAdd(cNumSub(b1, set_cNum(0, rho * gamma * phi)), d1), set_cNum(gamma ^ 2, 0))
+DD1_2 = cNumSub(set_cNum(1, 0), cNumExp(cNumProd(d1, set_cNum(tau, 0))))
+DD1_3 = cNumSub(set_cNum(1, 0), cNumProd(g1, cNumExp(cNumProd(d1, set_cNum(tau, 0)))))
+DD1 = cNumProd(DD1_1, cNumDiv(DD1_2, DD1_3))
+CC1_1 = set_cNum(0, r * phi * tau)
+CC1_2 = set_cNum((kappa * theta) / (gamma ^ 2), 0)
+CC1_3 = cNumProd(cNumAdd(cNumSub(b1, set_cNum(0, rho * gamma * phi)), d1), set_cNum(tau, 0))
+CC1_4 = cNumProd(set_cNum(2, 0), cNumLn(cNumDiv(cNumSub(set_cNum(1, 0), cNumProd(g1, cNumExp(cNumProd(d1, set_cNum(tau, 0))))), cNumSub(set_cNum(1, 0), g1))))
+CC1 = cNumAdd(CC1_1, cNumProd(CC1_2, cNumSub(CC1_3, CC1_4)))
+f1 = cNumExp(cNumAdd(cNumAdd(CC1, cNumProd(DD1, set_cNum(v, 0))), set_cNum(0, phi * Application.Ln(S))))
+
+dP1_dS = cNumReal(cNumProd(cNumExp(set_cNum(0, -phi * Application.Ln(k))), f1))
+
+End Function
+
+
+' Heston Gamma with discrete dividend
+
+Function HGamma(kappa As Double, theta As Double, lambda As Double, rho As Double, gamma As Double, tau As Double, k As Double, S As Double, r As Double, v As Double, CallPut As String, TDiv As Range, Div As Range, rDiv As Range)
+Dim SxD As Double
+SxD = S - PVDiv(tau, TDiv, Div, rDiv)
+Dim P1_int(1001) As Double, P2_int(1001) As Double, phi_int(1001) As Double
+Dim P1 As Double, P2 As Double, phi As Double, xg(16) As Double, wg(16) As Double
+Dim cnt As Integer, HestonC As Double
+cnt = 1
+
+For phi = 0.0001 To 100.0001 Step 0.1
+    phi_int(cnt) = phi
+    P1_int(cnt) = dP1_dS(phi, kappa, theta, lambda, rho, gamma, tau, k, SxD, r, v)
+    cnt = cnt + 1
+Next phi
+
+HGamma = (1 / Pi / SxD) * TRAPnumint(phi_int, P1_int)
+
+End Function
+
+
+' Integrand for derivative dP1/dv, used for Vega
+
+Function dP1_dV(phi As Double, kappa As Double, theta As Double, lambda As Double, rho As Double, gamma As Double, tau As Double, k As Double, S As Double, r As Double, v As Double)
+Dim tmp_f1 As cNum, f1 As cNum, d1 As cNum, g1 As cNum, DD1 As cNum, CC1 As cNum, b1 As cNum
+Dim DD1_1 As cNum, DD1_2 As cNum, DD1_3 As cNum, CC1_1 As cNum, CC1_2 As cNum, CC1_3 As cNum, CC1_4 As cNum
+
+Dim gtest As cNum, t1 As cNum, t2 As cNum, t3 As cNum
+Dim tt1 As Variant, mu1 As Double
+
+mu1 = 0.5
+b1 = set_cNum(kappa - lambda - rho * gamma, 0)
+d1 = cNumSqrt(cNumSub(cNumSq(cNumSub(set_cNum(0, rho * gamma * phi), b1)), cNumSub(set_cNum(0, gamma ^ 2 * 2 * mu1 * phi), set_cNum(gamma ^ 2 * phi ^ 2, 0))))
+g1 = cNumDiv(cNumAdd(cNumSub(b1, set_cNum(0, rho * gamma * phi)), d1), cNumSub(cNumSub(b1, set_cNum(0, rho * gamma * phi)), d1))
+DD1_1 = cNumDiv(cNumAdd(cNumSub(b1, set_cNum(0, rho * gamma * phi)), d1), set_cNum(gamma ^ 2, 0))
+DD1_2 = cNumSub(set_cNum(1, 0), cNumExp(cNumProd(d1, set_cNum(tau, 0))))
+DD1_3 = cNumSub(set_cNum(1, 0), cNumProd(g1, cNumExp(cNumProd(d1, set_cNum(tau, 0)))))
+DD1 = cNumProd(DD1_1, cNumDiv(DD1_2, DD1_3))
+CC1_1 = set_cNum(0, r * phi * tau)
+CC1_2 = set_cNum((kappa * theta) / (gamma ^ 2), 0)
+CC1_3 = cNumProd(cNumAdd(cNumSub(b1, set_cNum(0, rho * gamma * phi)), d1), set_cNum(tau, 0))
+CC1_4 = cNumProd(set_cNum(2, 0), cNumLn(cNumDiv(cNumSub(set_cNum(1, 0), cNumProd(g1, cNumExp(cNumProd(d1, set_cNum(tau, 0))))), cNumSub(set_cNum(1, 0), g1))))
+CC1 = cNumAdd(CC1_1, cNumProd(CC1_2, cNumSub(CC1_3, CC1_4)))
+f1 = cNumExp(cNumAdd(cNumAdd(CC1, cNumProd(DD1, set_cNum(v, 0))), set_cNum(0, phi * Application.Ln(S))))
+
+dP1_dV = cNumReal(cNumDiv(cNumProd(cNumProd(cNumExp(set_cNum(0, -phi * Application.Ln(k))), f1), DD1), set_cNum(0, phi)))
+
+End Function
+
+
+' Integrand for derivative dP2/dv, used for Vega
+
+Function dP2_dV(phi As Double, kappa As Double, theta As Double, lambda As Double, rho As Double, gamma As Double, tau As Double, k As Double, S As Double, r As Double, v As Double)
+Dim tmp_f1 As cNum, f1 As cNum, d1 As cNum, g1 As cNum, DD1 As cNum, CC1 As cNum, b1 As cNum, testp As cNum
+Dim DD1_1 As cNum, DD1_2 As cNum, DD1_3 As cNum, CC1_1 As cNum, CC1_2 As cNum, CC1_3 As cNum, CC1_4 As cNum
+Dim mu1 As Double
+
+mu1 = -0.5
+b1 = set_cNum(kappa - lambda, 0)
+testp = cNumSub(set_cNum(0, gamma ^ 2 * 2 * mu1 * phi), set_cNum(gamma ^ 2 * phi ^ 2, 0))
+d1 = cNumSqrt(cNumSub(cNumSq(cNumSub(set_cNum(0, rho * gamma * phi), b1)), cNumSub(set_cNum(0, gamma ^ 2 * 2 * mu1 * phi), set_cNum(gamma ^ 2 * phi ^ 2, 0))))
+g1 = cNumDiv(cNumAdd(cNumSub(b1, set_cNum(0, rho * gamma * phi)), d1), cNumSub(cNumSub(b1, set_cNum(0, rho * gamma * phi)), d1))
+DD1_1 = cNumDiv(cNumAdd(cNumSub(b1, set_cNum(0, rho * gamma * phi)), d1), set_cNum(gamma ^ 2, 0))
+DD1_2 = cNumSub(set_cNum(1, 0), cNumExp(cNumProd(d1, set_cNum(tau, 0))))
+DD1_3 = cNumSub(set_cNum(1, 0), cNumProd(g1, cNumExp(cNumProd(d1, set_cNum(tau, 0)))))
+DD1 = cNumProd(DD1_1, cNumDiv(DD1_2, DD1_3))
+CC1_1 = set_cNum(0, r * phi * tau)
+CC1_2 = set_cNum((kappa * theta) / (gamma ^ 2), 0)
+CC1_3 = cNumProd(cNumAdd(cNumSub(b1, set_cNum(0, rho * gamma * phi)), d1), set_cNum(tau, 0))
+CC1_4 = cNumProd(set_cNum(2, 0), cNumLn(cNumDiv(cNumSub(set_cNum(1, 0), cNumProd(g1, cNumExp(cNumProd(d1, set_cNum(tau, 0))))), cNumSub(set_cNum(1, 0), g1))))
+CC1 = cNumAdd(CC1_1, cNumProd(CC1_2, cNumSub(CC1_3, CC1_4)))
+
+f1 = cNumExp(cNumAdd(cNumAdd(CC1, cNumProd(DD1, set_cNum(v, 0))), set_cNum(0, phi * Application.Ln(S))))
+
+dP2_dV = cNumReal(cNumProd(cNumDiv(cNumProd(cNumExp(set_cNum(0, -phi * Application.Ln(k))), f1), set_cNum(0, phi)), DD1))
+
+End Function
+
+
+' Heston Vega with discrete dividend
+
+Function HVega(kappa As Double, theta As Double, lambda As Double, rho As Double, gamma As Double, tau As Double, k As Double, S As Double, r As Double, v As Double, CallPut As String, TDiv As Range, Div As Range, rDiv As Range)
+Dim SxD As Double
+SxD = S - PVDiv(tau, TDiv, Div, rDiv)
+Dim P1_int(1001) As Double, P2_int(1001) As Double, phi_int(1001) As Double
+Dim P1 As Double, P2 As Double, phi As Double, xg(16) As Double, wg(16) As Double
+Dim cnt As Integer, HestonC As Double
+Dim dp1 As Double, dp2 As Double
+cnt = 1
+
+For phi = 0.0001 To 100.0001 Step 0.1
+    phi_int(cnt) = phi
+    P1_int(cnt) = dP1_dV(phi, kappa, theta, lambda, rho, gamma, tau, k, SxD, r, v)
+    P2_int(cnt) = dP2_dV(phi, kappa, theta, lambda, rho, gamma, tau, k, SxD, r, v)
+    cnt = cnt + 1
+Next phi
+
+dp1 = (1 / Pi) * TRAPnumint(phi_int, P1_int)
+dp2 = (1 / Pi) * TRAPnumint(phi_int, P2_int)
+
+HVega = SxD * dp1 - k * Exp(-r * tau) * dp2
+
+End Function
+
+
+
+' Integrand for derivative dP1/dT, used for Theta
+
+Function dP1_dT(phi As Double, kappa As Double, theta As Double, lambda As Double, rho As Double, gamma As Double, tau As Double, k As Double, S As Double, r As Double, v As Double)
+Dim tmp_f1 As cNum, f1 As cNum, d1 As cNum, g1 As cNum, DD1 As cNum, CC1 As cNum, b1 As cNum, CC1p As cNum, DD1p As cNum
+Dim DD1_1 As cNum, DD1_2 As cNum, DD1_3 As cNum, DD1_4 As cNum, CC1_1 As cNum, CC1_2 As cNum, CC1_3 As cNum, CC1_4 As cNum
+Dim DD1p_1 As cNum, DD1p_2 As cNum, DD1p_3 As cNum, DD1p_4 As cNum, CC1p_1 As cNum, CC1p_2 As cNum, CC1p_3 As cNum
+Dim expdtau As cNum
+Dim gtest As cNum, t1 As cNum, t2 As cNum, t3 As cNum
+Dim tt1 As Variant, mu1 As Double
+
+mu1 = 0.5
+b1 = set_cNum(kappa - lambda - rho * gamma, 0)
+d1 = cNumSqrt(cNumSub(cNumSq(cNumSub(set_cNum(0, rho * gamma * phi), b1)), cNumSub(set_cNum(0, gamma ^ 2 * 2 * mu1 * phi), set_cNum(gamma ^ 2 * phi ^ 2, 0))))
+g1 = cNumDiv(cNumAdd(cNumSub(b1, set_cNum(0, rho * gamma * phi)), d1), cNumSub(cNumSub(b1, set_cNum(0, rho * gamma * phi)), d1))
+
+DD1_1 = cNumDiv(cNumAdd(cNumSub(b1, set_cNum(0, rho * gamma * phi)), d1), set_cNum(gamma ^ 2, 0))
+DD1_2 = cNumSub(set_cNum(1, 0), cNumExp(cNumProd(d1, set_cNum(tau, 0))))
+DD1_3 = cNumSub(set_cNum(1, 0), cNumProd(g1, cNumExp(cNumProd(d1, set_cNum(tau, 0)))))
+DD1 = cNumProd(DD1_1, cNumDiv(DD1_2, DD1_3))
+
+CC1_1 = set_cNum(0, r * phi * tau)
+CC1_2 = set_cNum((kappa * theta) / (gamma ^ 2), 0)
+CC1_3 = cNumProd(cNumAdd(cNumSub(b1, set_cNum(0, rho * gamma * phi)), d1), set_cNum(tau, 0))
+CC1_4 = cNumProd(set_cNum(2, 0), cNumLn(cNumDiv(cNumSub(set_cNum(1, 0), cNumProd(g1, cNumExp(cNumProd(d1, set_cNum(tau, 0))))), cNumSub(set_cNum(1, 0), g1))))
+CC1 = cNumAdd(CC1_1, cNumProd(CC1_2, cNumSub(CC1_3, CC1_4)))
+
+CC1p_1 = cNumAdd(cNumSub(b1, set_cNum(0, rho * gamma * phi)), d1)
+CC1p_2 = cNumProd(set_cNum(2, 0), cNumProd(cNumProd(g1, d1), cNumExp(cNumProd(d1, set_cNum(tau, 0)))))
+CC1p_3 = cNumSub(set_cNum(1, 0), cNumProd(g1, cNumExp(cNumProd(d1, set_cNum(tau, 0)))))
+CC1p = cNumAdd(set_cNum(0, r * phi), cNumProd(set_cNum(kappa * theta / gamma ^ 2, 0), cNumAdd(CC1p_1, cNumDiv(CC1p_2, CC1p_3))))
+
+expdtau = cNumExp(cNumProd(d1, set_cNum(tau, 0)))
+DD1p_1 = cNumDiv(cNumAdd(cNumSub(b1, set_cNum(0, rho * gamma * phi)), d1), set_cNum(gamma ^ 2, 0))
+DD1p_2 = cNumProd(d1, cNumProd(expdtau, cNumSub(cNumProd(g1, expdtau), set_cNum(1, 0))))
+DD1p_3 = cNumProd(cNumSub(set_cNum(1, 0), expdtau), cNumProd(g1, cNumProd(d1, expdtau)))
+DD1p_4 = cNumSq(cNumSub(set_cNum(1, 0), cNumProd(g1, expdtau)))
+DD1p = cNumProd(DD1p_1, cNumDiv(cNumAdd(DD1p_2, DD1p_3), DD1p_4))
+
+f1 = cNumExp(cNumAdd(cNumAdd(CC1, cNumProd(DD1, set_cNum(v, 0))), set_cNum(0, phi * Log(S))))
+f1 = cNumProd(f1, cNumAdd(CC1p, cNumProd(DD1p, set_cNum(v, 0))))
+
+dP1_dT = cNumReal(cNumDiv(cNumProd(cNumExp(set_cNum(0, -phi * Log(k))), f1), set_cNum(0, phi)))
+
+End Function
+
+
+' Integrand for dP2/dT, used for Theta
+
+Function dP2_dT(phi As Double, kappa As Double, theta As Double, lambda As Double, rho As Double, gamma As Double, tau As Double, k As Double, S As Double, r As Double, v As Double)
+Dim tmp_f1 As cNum, f1 As cNum, d1 As cNum, g1 As cNum, DD1 As cNum, CC1 As cNum, b1 As cNum, CC1p As cNum, DD1p As cNum
+Dim DD1_1 As cNum, DD1_2 As cNum, DD1_3 As cNum, DD1_4 As cNum, CC1_1 As cNum, CC1_2 As cNum, CC1_3 As cNum, CC1_4 As cNum
+Dim DD1p_1 As cNum, DD1p_2 As cNum, DD1p_3 As cNum, DD1p_4 As cNum, CC1p_1 As cNum, CC1p_2 As cNum, CC1p_3 As cNum
+Dim expdtau As cNum
+Dim gtest As cNum, t1 As cNum, t2 As cNum, t3 As cNum
+Dim tt1 As Variant, mu1 As Double
+
+mu1 = -0.5
+b1 = set_cNum(kappa - lambda, 0)
+d1 = cNumSqrt(cNumSub(cNumSq(cNumSub(set_cNum(0, rho * gamma * phi), b1)), cNumSub(set_cNum(0, gamma ^ 2 * 2 * mu1 * phi), set_cNum(gamma ^ 2 * phi ^ 2, 0))))
+g1 = cNumDiv(cNumAdd(cNumSub(b1, set_cNum(0, rho * gamma * phi)), d1), cNumSub(cNumSub(b1, set_cNum(0, rho * gamma * phi)), d1))
+
+DD1_1 = cNumDiv(cNumAdd(cNumSub(b1, set_cNum(0, rho * gamma * phi)), d1), set_cNum(gamma ^ 2, 0))
+DD1_2 = cNumSub(set_cNum(1, 0), cNumExp(cNumProd(d1, set_cNum(tau, 0))))
+DD1_3 = cNumSub(set_cNum(1, 0), cNumProd(g1, cNumExp(cNumProd(d1, set_cNum(tau, 0)))))
+DD1 = cNumProd(DD1_1, cNumDiv(DD1_2, DD1_3))
+
+CC1_1 = set_cNum(0, r * phi * tau)
+CC1_2 = set_cNum((kappa * theta) / (gamma ^ 2), 0)
+CC1_3 = cNumProd(cNumAdd(cNumSub(b1, set_cNum(0, rho * gamma * phi)), d1), set_cNum(tau, 0))
+CC1_4 = cNumProd(set_cNum(2, 0), cNumLn(cNumDiv(cNumSub(set_cNum(1, 0), cNumProd(g1, cNumExp(cNumProd(d1, set_cNum(tau, 0))))), cNumSub(set_cNum(1, 0), g1))))
+CC1 = cNumAdd(CC1_1, cNumProd(CC1_2, cNumSub(CC1_3, CC1_4)))
+
+CC1p_1 = cNumAdd(cNumSub(b1, set_cNum(0, rho * gamma * phi)), d1)
+CC1p_2 = cNumProd(set_cNum(2, 0), cNumProd(cNumProd(g1, d1), cNumExp(cNumProd(d1, set_cNum(tau, 0)))))
+CC1p_3 = cNumSub(set_cNum(1, 0), cNumProd(g1, cNumExp(cNumProd(d1, set_cNum(tau, 0)))))
+CC1p = cNumAdd(set_cNum(0, r * phi), cNumProd(set_cNum(kappa * theta / gamma ^ 2, 0), cNumAdd(CC1p_1, cNumDiv(CC1p_2, CC1p_3))))
+
+expdtau = cNumExp(cNumProd(d1, set_cNum(tau, 0)))
+DD1p_1 = cNumDiv(cNumAdd(cNumSub(b1, set_cNum(0, rho * gamma * phi)), d1), set_cNum(gamma ^ 2, 0))
+DD1p_2 = cNumProd(d1, cNumProd(expdtau, cNumSub(cNumProd(g1, expdtau), set_cNum(1, 0))))
+DD1p_3 = cNumProd(cNumSub(set_cNum(1, 0), expdtau), cNumProd(g1, cNumProd(d1, expdtau)))
+DD1p_4 = cNumSq(cNumSub(set_cNum(1, 0), cNumProd(g1, expdtau)))
+DD1p = cNumProd(DD1p_1, cNumDiv(cNumAdd(DD1p_2, DD1p_3), DD1p_4))
+
+f1 = cNumExp(cNumAdd(cNumAdd(CC1, cNumProd(DD1, set_cNum(v, 0))), set_cNum(0, phi * Log(S))))
+f1 = cNumProd(f1, cNumAdd(CC1p, cNumProd(DD1p, set_cNum(v, 0))))
+
+dP2_dT = cNumReal(cNumDiv(cNumProd(cNumExp(set_cNum(0, -phi * Log(k))), f1), set_cNum(0, phi)))
+
+End Function
+
+
+' Heston Theta with discrete dividend
+
+Function HTheta(kappa As Double, theta As Double, lambda As Double, rho As Double, gamma As Double, tau As Double, k As Double, S As Double, r As Double, v As Double, CallPut As String, TDiv As Range, Div As Range, rDiv As Range)
+Dim SxD As Double
+SxD = S - PVDiv(tau, TDiv, Div, rDiv)
+Dim P1p_int(1001) As Double, P2p_int(1001) As Double, P2_int(1001) As Double, phi_int(1001) As Double
+Dim P1P As Double, P2P As Double, P2 As Double, phi As Double, xg(16) As Double, wg(16) As Double
+Dim cnt As Integer, HestonC As Double
+
+cnt = 1
+
+For phi = 0.0001 To 100.0001 Step 0.1
+    phi_int(cnt) = phi
+    P1p_int(cnt) = dP1_dT(phi, kappa, theta, lambda, rho, gamma, tau, k, SxD, r, v)
+    P2p_int(cnt) = dP2_dT(phi, kappa, theta, lambda, rho, gamma, tau, k, SxD, r, v)
+    P2_int(cnt) = HestonP2(phi, kappa, theta, lambda, rho, gamma, tau, k, SxD, r, v)
+    cnt = cnt + 1
+Next phi
+
+P1P = (1 / Pi) * TRAPnumint(phi_int, P1p_int)
+P2P = (1 / Pi) * TRAPnumint(phi_int, P2p_int)
+P2 = 0.5 + (1 / Pi) * TRAPnumint(phi_int, P2_int)
+
+If P2 < 0 Then P2 = 0
+If P2 > 1 Then P2 = 1
+
+Th = -SxD * P1P + k * Exp(-r * tau) * (P2P - r * P2)
+
+Select Case CallPut
+    Case "Call": HTheta = Th
+    Case "Put": HTheta = Th + k * r * Exp(-r * tau)
+End Select
+
+End Function
