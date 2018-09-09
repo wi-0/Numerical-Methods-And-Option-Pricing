@@ -33,9 +33,11 @@ Numerical methods and option pricing in VBA
 - Gram-Charlier European Option Rho with Discrete Dividends
 - Gram-Charlier European Option Theta with Discrete Dividends
 
-# Binomial-Trees
+# Trees
 - CRR Binomial Tree for European Vanilla Option
+- CRR binomial option pricing for European and American vanilla options
 - Tian's Flexible Bianomial Tree for Barrier Option Pricing
+- Flexible Binomial Option Pricing for European & American vanilla options
 
 # Implied-Volatility
 - Implied Volatility from BS_Vega in Black-Sholes by Bisection-and-Newton-Raphson Method
