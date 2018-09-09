@@ -1,0 +1,128 @@
+Option Explicit
+
+
+' Gram-Charlier European Option Price with Discrete Dividends
+
+Function GC_Div(S As Double, k As Double, r As Double, T As Double, sigma As Double, gamma As Double, kappa As Double, CallPut As String, TDiv As Range, Div As Range, rDiv As Range)
+Dim T_Yr As Double, SxD As Double, d As Double, gammaT As Double, kappaT As Double, sigmaT As Double, CallPrice As Double
+T_Yr = T / 12
+SxD = S - PVDiv(T_Yr, TDiv, Div, rDiv)
+gammaT = gamma / Sqr(T): kappaT = kappa / T: sigmaT = sigma * Sqr(T)
+d = (Log(SxD / k) + r * T + sigmaT ^ 2 / 2) / sigmaT
+CallPrice = SxD * cdfNorm(d) - k * Exp(-r * T) * cdfNorm(d - sigmaT) + SxD * pdfNorm(d) _
+* sigmaT * ((gammaT / 6) * (2 * sigmaT - d) - (kappaT / 24) * (1 - d ^ 2 + 3 * d * sigmaT - 3 * sigmaT ^ 2))
+Select Case CallPut
+Case "Call": GC_Div = CallPrice
+Case "Put": GC_Div = CallPrice + k * Exp(-r * T) - SxD
+End Select
+End Function
+
+
+' Gram-Charlier European Option Delta with Discrete Dividends
+
+Function GC_DeltaDiv(S As Double, k As Double, r As Double, T As Double, sigma As Double, gamma As Double, kappa As Double, CallPut As String, TDiv As Range, Div As Range, rDiv As Range)
+Dim T_Yr As Double, SxD As Double, d As Double, gammaT As Double, kappaT As Double, sigmaT As Double, Delta As Double
+T_Yr = T / 12
+SxD = S - PVDiv(T_Yr, TDiv, Div, rDiv)
+gammaT = gamma / Sqr(T)
+kappaT = kappa / T
+sigmaT = sigma * Sqr(T)
+d = (Log(SxD / k) + r * T + sigmaT ^ 2 / 2) / sigmaT
+Delta = cdfNorm(d) - (gammaT / 6) * pdfNorm(d) * (1 - d ^ 2 + 3 * d * sigmaT - 2 * sigmaT ^ 2) _
++ (kappaT / 24) * pdfNorm(d) * (3 * d * (1 - 2 * sigmaT ^ 2) _
++ 4 * d ^ 2 * SxD - d ^ 3 - 4 * sigmaT + 3 * sigmaT ^ 2)
+Select Case CallPut
+Case "Call": GC_DeltaDiv = Delta
+Case "Put": GC_DeltaDiv = Delta - 1
+End Select
+End Function
+
+
+' Gram-Charlier European Option Gamma with Discrete Dividends
+
+Function GC_GammaDiv(S As Double, k As Double, r As Double, T As Double, sigma As Double, gamma As Double, kappa As Double, TDiv As Range, Div As Range, rDiv As Range)
+Dim T_Yr As Double, SxD As Double, d As Double, gammaT As Double, kappaT As Double, sigmaT As Double
+T_Yr = T / 12
+SxD = S - PVDiv(T_Yr, TDiv, Div, rDiv)
+gammaT = gamma / Sqr(T)
+kappaT = kappa / T
+sigmaT = sigma * Sqr(T)
+d = (Log(SxD / k) + r * T + sigmaT ^ 2 / 2) / sigmaT
+GC_GammaDiv = pdfNorm(d) / (SxD * sigmaT) - (gammaT / 6) _
+* pdfNorm(d) / (SxD * sigmaT) * (d ^ 3 + d _
+* (2 * sigmaT ^ 2 - 3) + 3 * sigmaT * (1 - d ^ 2)) _
++ (kappaT / 24) * pdfNorm(d) / (SxD * sigmaT) _
+* (d ^ 4 + 3 * (1 - d ^ 2) * (1 - 2 * sigmaT ^ 2) _
++ 4 * sigmaT * d * (3 - d ^ 2) - 3 * d _
+* (d + sigmaT ^ 2))
+End Function
+
+
+' Gram-Charlier European Option Vega with Discrete Dividends
+
+Function GC_VegaDiv(S As Double, k As Double, r As Double, T As Double, sigma As Double, gamma As Double, kappa As Double, TDiv As Range, Div As Range, rDiv As Range)
+Dim T_Yr As Double, SxD As Double, d As Double, d1 As Double, gammaT As Double, kappaT As Double
+T_Yr = T / 12
+SxD = S - PVDiv(T_Yr, TDiv, Div, rDiv)
+gammaT = gamma / Sqr(T)
+kappaT = kappa / T
+d = (Log(SxD / k) + (r + sigma ^ 2 / 2) * T) _
+/ sigma / Sqr(T)
+d1 = Sqr(T) - d / sigma
+GC_VegaDiv = SxD * pdfNorm(d) * Sqr(T) + SxD * pdfNorm(d) _
+* (gammaT / 6) * Sqr(T) * (3 * sigma * Sqr(T) _
+* (1 + d ^ 2) - d * (d ^ 2 + 2 * sigma ^ 2 * T)) _
++ SxD * pdfNorm(d) * (kappaT / 24) * Sqr(T) * ((1 - d ^ 2 + 3 * d _
+* sigma * Sqr(T) - 3 * sigma ^ 2 * T) * (d * d1 _
+* sigma - 1) + (2 * d * d1 + 3 * sigma * T) _
+* sigma)
+End Function
+
+
+' Gram-Charlier European Option Rho with Discrete Dividends
+
+Function GC_RhoDiv(S As Double, k As Double, r As Double, T As Double, sigma As Double, gamma As Double, kappa As Double, CallPut As String, TDiv As Range, Div As Range, rDiv As Range)
+Dim T_Yr As Double, SxD As Double, d As Double, gammaT As Double, kappaT As Double, sigmaT As Double, rho As Double
+T_Yr = T / 12
+SxD = S - PVDiv(T_Yr, TDiv, Div, rDiv)
+gammaT = gamma / Sqr(T)
+kappaT = kappa / T
+sigmaT = sigma * Sqr(T)
+d = (Log(SxD / k) + r * T + sigmaT ^ 2 / 2) / sigmaT
+rho = k * T * Exp(-r * T) * cdfNorm(d - sigmaT) _
+- (gammaT / 6) * pdfNorm(d) * SxD * T * (2 * sigmaT * d _
+- d ^ 2 + 1) + (kappaT / 24) * pdfNorm(d) * SxD * T _
+* (-d ^ 3 + 3 * (sigmaT * d + 1) * (d - sigmaT))
+Select Case CallPut
+Case "Call": GC_RhoDiv = rho
+Case "Put": GC_RhoDiv = rho - k * T * Exp(-r * T)
+End Select
+End Function
+
+
+' Gram-Charlier European Option Theta with Discrete Dividends
+
+Function GC_ThetaDiv(S As Double, k As Double, r As Double, T As Double, sigma As Double, gamma As Double, kappa As Double, CallPut As String, TDiv As Range, Div As Range, rDiv As Range)
+Dim T_Yr As Double, SxD As Double, d As Double, d1 As Double, C1 As Double, C2 As Double, C3 As Double, theta As Double
+T_Yr = T / 12
+SxD = S - PVDiv(T_Yr, TDiv, Div, rDiv)
+d = (Log(SxD / k) + (r + sigma ^ 2 / 2) * T) / (sigma * Sqr(T))
+d1 = (r + sigma ^ 2 / 2) / (sigma * Sqr(T)) - d / (2 * T)
+C1 = k * r * Exp(-r * T) * cdfNorm(d - sigma * Sqr(T)) _
++ SxD * pdfNorm(d) * sigma / (2 * Sqr(T))
+C2 = SxD * sigma * pdfNorm(d) * (gamma / 6) * ((d - 2 _
+* sigma * Sqr(T)) * d * d1 + (sigma / Sqr(T) - d1))
+C3 = SxD * sigma * pdfNorm(d) * (kappa / 24) * (((3 - d ^ 2) _
+/ Sqr(T) + (3 * d * sigma) - 3 * sigma ^ 2 * Sqr(T)) _
+* d * d1 + T ^ (-1.5) * (1 - d ^ 2) / 2 - 3 _
+* sigma * d1 + 3 * sigma ^ 2 / 2 / Sqr(T))
+theta = -C1 - C2 - C3
+Select Case CallPut
+Case "Call": GC_ThetaDiv = theta
+Case "Put": GC_ThetaDiv = theta + k * r * Exp(-r * T)
+End Select
+End Function
+
+
+
+
