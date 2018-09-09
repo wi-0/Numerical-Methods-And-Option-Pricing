@@ -1,7 +1,7 @@
 # Numerical-Methods-And-Option-Pricing
 Numerical methods and option pricing in VBA
 
-This repository is an extraction of the legacy examples in option pricing in VBA. The following list covers the major functions used in the examples for numerical integration, option pricing, and Greeks calculation. See VBA Example 1 and 2 for actual implementaion.
+This repository is an extraction of the legacy examples in option pricing in VBA. The following list covers the major functions used in the examples for numerical methods, option pricing, and Greeks calculation. See VBA Example 1 and 2 for actual implementaion.
 
 
 # Black-Scholes
