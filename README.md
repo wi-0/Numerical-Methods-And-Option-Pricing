@@ -1,7 +1,7 @@
 # Numerical-Methods-And-Option-Pricing
 Numerical methods and option pricing in VBA
 
-Black-Scholes
+# Black-Scholes
 - Black-Scholes European Option
 - Black-Scholes European Asset-or-Nothing Option
 - Black-Scholes European Option with Discrete Dividend
@@ -13,7 +13,7 @@ Black-Scholes
 - Black-Scholes Rho with Discrete Dividend
 - Black-Scholes Theta with Discrete Dividend
 
-Heston
+# Heston
 - Heston Option Price Using Trapezoidal Rule with Combined Integrand
 - Heston Option Price Using 10-Point Gauss. Legendre Quadrature Rule with Combined Integrand
 - Heston Option Price on Dividend-Paying Stock Using 10-Point GL Quadrature with Combined Integrand
@@ -25,7 +25,7 @@ Heston
 - Heston Vega with discrete dividend
 - Heston Theta with discrete dividend
 
-Gram-Charlier
+# Gram-Charlier
 - Gram-Charlier European Option Price with Discrete Dividends
 - Gram-Charlier European Option Delta with Discrete Dividends
 - Gram-Charlier European Option Gamma with Discrete Dividends
@@ -33,12 +33,19 @@ Gram-Charlier
 - Gram-Charlier European Option Rho with Discrete Dividends
 - Gram-Charlier European Option Theta with Discrete Dividends
 
-Binomial-Trees
+# Binomial-Trees
 - CRR Binomial Tree for European Vanilla Option
 - Tian's Flexible Bianomial Tree for Barrier Option Pricing
 
-Implied-Volatility
+# Implied-Volatility
 - Implied Volatility from BS_Vega in Black-Sholes by Bisection-and-Newton-Raphson Method
 
-Utility
+# Utility
 - Present Value of Future Dividends
+- PDF For Standard Normal
+- CDF For Standard Normal
+- Calculate No. of Combination
+- Calculate Pi
+
+# VBA Eample 1 & 2
+- Implementation Examples
