@@ -52,4 +52,4 @@ This repository is an extraction of the legacy examples in option pricing in VBA
 - Calculate Pi
 
 # VBA Eample 1 & 2
-- Legacy implementation Examples
+- Legacy implementation examples
